@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
@@ -160,8 +161,6 @@ async def deliver_anime(user_id: int, anime_id: int, msg: types.Message):
 
 # ─── Admin: Anime qo'shish ────────────────────────────────────────────────────
 
-# ─── Admin: Anime qo'shish ────────────────────────────────────────────────────
-
 @dp.callback_query(F.data == "add_anime_btn")
 async def callback_add_anime(call: CallbackQuery, state: FSMContext):
     await state.set_state(AddAnimeState.waiting_title)
@@ -216,8 +215,6 @@ async def addanime_photo_skip(msg: types.Message, state: FSMContext):
         )
     else:
         await msg.answer("❌ Iltimos, rasm faylni yuboring yoki /skip bosing!")
-
-# ─── Admin: Epizod qo'shish ───────────────────────────────────────────────────
 
 # ─── Admin: Epizod qo'shish ───────────────────────────────────────────────────
 
@@ -284,9 +281,7 @@ async def addepisode_video(msg: types.Message, state: FSMContext):
 async def addepisode_not_video(msg: types.Message):
     await msg.answer("❌ Iltimos, video faylni yuboring!")
 
-# ─── Admin: Deep link olish ───────────────────────────────────────────────────
-
-
+# ─── Admin: List va Control ───────────────────────────────────────────────────
 
 async def show_list(user_id: int, msg_or_call):
     """List menyu ko'rsatish"""
@@ -433,7 +428,6 @@ async def callback_confirm_delete(call: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("cancel_delete:"))
 async def callback_cancel_delete(call: CallbackQuery):
-    anime_id = int(call.data.split(":")[1])
     await show_list(call.from_user.id, call)
 
 # ─── Admin: Tahrirlash (Edit) ────────────────────────────────────────────────
@@ -464,15 +458,11 @@ async def callback_edit_anime(call: CallbackQuery, state: FSMContext):
 
 @dp.message(EditAnimeState.waiting_title)
 async def edit_anime_title(msg: types.Message, state: FSMContext):
-    # Komandalarni ishlatish imkoniyati beramiz
-    if msg.text and msg.text.startswith("/"):
-        if msg.text == "/skip":
-            pass # Skip handling past command check
-        else:
-            await state.clear()
-            if msg.text == "/list":
-                return await cmd_list(msg)
-            return
+    if msg.text and msg.text.startswith("/") and msg.text != "/skip":
+        await state.clear()
+        if msg.text == "/list":
+            return await cmd_list(msg)
+        return
     
     if msg.text == "/skip":
         await state.set_state(EditAnimeState.waiting_desc)
@@ -484,15 +474,11 @@ async def edit_anime_title(msg: types.Message, state: FSMContext):
 
 @dp.message(EditAnimeState.waiting_desc)
 async def edit_anime_desc(msg: types.Message, state: FSMContext):
-    # Komandalarni ishlatish imkoniyati beramiz
-    if msg.text and msg.text.startswith("/"):
-        if msg.text == "/skip":
-            pass # Skip handling past command check
-        else:
-            await state.clear()
-            if msg.text == "/list":
-                return await cmd_list(msg)
-            return
+    if msg.text and msg.text.startswith("/") and msg.text != "/skip":
+        await state.clear()
+        if msg.text == "/list":
+            return await cmd_list(msg)
+        return
     
     if msg.text == "/skip":
         await state.set_state(EditAnimeState.waiting_photo)
@@ -505,47 +491,37 @@ async def edit_anime_desc(msg: types.Message, state: FSMContext):
 @dp.message(EditAnimeState.waiting_photo, F.photo)
 async def edit_anime_photo(msg: types.Message, state: FSMContext):
     photo_file_id = msg.photo[-1].file_id
-    
     data = await state.get_data()
     anime_id = data['edit_anime_id']
     anime = db.get_anime(anime_id)
-    
     title = data.get('edit_title', anime['title'])
     desc = data.get('edit_desc', anime['description'])
     
     db.update_anime(anime_id, title, desc, photo_file_id)
     await state.clear()
-    
     await msg.answer(f"✅ <b>{title}</b> muvaffaqiyatli tahrirlandi!", parse_mode="HTML")
 
 @dp.message(EditAnimeState.waiting_photo)
 async def edit_anime_photo_skip(msg: types.Message, state: FSMContext):
-    # Faqat text xabarlari uchun (rasmlar uchun emas)
     if not msg.text:
         await msg.answer("❌ Iltimos, rasm yuboring yoki /skip bosing!")
         return
     
-    # Komandalarni ishlatish imkoniyati beramiz
-    if msg.text.startswith("/"):
-        if msg.text == "/skip":
-            pass # Skip handling past command check
-        else:
-            await state.clear()
-            if msg.text == "/list":
-                return await cmd_list(msg)
-            return
+    if msg.text.startswith("/") and msg.text != "/skip":
+        await state.clear()
+        if msg.text == "/list":
+            return await cmd_list(msg)
+        return
     
     if msg.text == "/skip":
         data = await state.get_data()
         anime_id = data['edit_anime_id']
         anime = db.get_anime(anime_id)
-        
         title = data.get('edit_title', anime['title'])
         desc = data.get('edit_desc', anime['description'])
         
         db.update_anime(anime_id, title, desc, anime['photo_file_id'])
         await state.clear()
-        
         await msg.answer(f"✅ <b>{title}</b> muvaffaqiyatli tahrirlandi!", parse_mode="HTML")
     else:
         await msg.answer("❌ Iltimos, rasm yuboring yoki /skip bosing!")
@@ -559,13 +535,11 @@ async def callback_cancel_edit(call: CallbackQuery, state: FSMContext):
 
 async def set_commands():
     """Telegram pastki input qismida chiquvchi buyruqlar menyusi"""
-    # Oddiy foydalanuvchilar uchun (faqat /start)
     user_commands = [
         BotCommand(command="start", description="Botni ishga tushirish"),
     ]
     await bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
 
-    # Adminlar uchun (faqat list va help)
     admin_commands = [
         BotCommand(command="start",  description="Botni ishga tushirish"),
         BotCommand(command="list",   description="📋 Barcha animelar menus"),
@@ -580,10 +554,28 @@ async def set_commands():
         except Exception:
             pass
 
+# ─── Render Health Check Server ───────────────────────────────────────────────
+
+from aiohttp import web
+
+async def handle_health_check(request):
+    return web.Response(text="Bot is running!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 async def main():
     await set_commands()
+    # Web serverni fonda ishga tushirish
+    asyncio.create_task(start_web_server())
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

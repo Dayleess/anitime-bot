@@ -1,1 +1,1 @@
-worker: python anitime.py
+web: python anitime.py
